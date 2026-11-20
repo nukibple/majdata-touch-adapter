@@ -1,0 +1,19 @@
+[Unit]
+Description=majdata touch panel client (Surface touchscreen -> TCP -> Windows bridge)
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arch
+SupplementaryGroups=input
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /usr/local/bin/majdata-panel.py --config /home/arch/.config/majdata-panel/config.json
+Restart=always
+RestartSec=2
+Nice=-5
+# 触摸延迟敏感，别让内核把它冻在冷 cgroup 里
+TimeoutStopSec=3
+
+[Install]
+WantedBy=graphical-session.target
