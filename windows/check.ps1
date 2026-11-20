@@ -1,5 +1,5 @@
 ﻿<#
-    check.ps1 —— 环境自检（由 一键启动.bat 调用）
+    check.ps1 —— 环境自检（由 run.bat 调用）
     返回 0 = 可以启动；1 = 有阻塞问题（控制台会说明怎么修）
 #>
 $ErrorActionPreference = "Continue"
@@ -17,12 +17,12 @@ $pkg  = Join-Path $root "Package"
 Write-Host "`n=== 1/6 目录检查 ===" -ForegroundColor Cyan
 Write-Host "  当前目录: $root"
 if (Test-Path (Join-Path $root "Package")) { OK "找到 Package 目录" }
-else { Bad "没有找到 Package 目录" "请把『一键启动.bat』和『tool』文件夹放到游戏根目录（与 Package 同级）" }
+else { Bad "没有找到 Package 目录" "请把『run.bat』和『tool』文件夹放到游戏根目录（与 Package 同级）" }
 $launch = Get-ChildItem $root -Filter "*.bat" | Where-Object { $_.Name -match '^启动|^start' } | Select-Object -First 1
 if ($launch) { OK "找到游戏启动脚本: $($launch.Name)" }
 else { Bad "没有找到游戏启动脚本（启动.bat）" "确认游戏根目录里有 启动.bat" }
 if (Test-Path (Join-Path $tool "bridge.py")) { OK "程序目录 tool 完整" }
-else { Bad "tool 文件夹缺失或不完整" "重新解压 release 包，保持『一键启动.bat』与『tool』同级" }
+else { Bad "tool 文件夹缺失或不完整" "重新解压 release 包，保持『run.bat』与『tool』同级" }
 Write-Host "`n=== 2/6 内置 Python ===" -ForegroundColor Cyan
 $py = Join-Path $tool "python\python.exe"
 if (Test-Path $py) {
@@ -41,8 +41,8 @@ else {
         "需要用『虚拟串口软件』创建一对互通端口 COM1 与 COM2；`n         重启后端口消失的话，用它自带的驱动管理界面重新启用驱动，或在设备管理器里检查端口设备是否报错"
 }
 Write-Host "`n=== 4/6 游戏配置 主配置 ini ===" -ForegroundColor Cyan
-$ini = Join-Path $pkg "主配置 ini"
-if (Test-Path $ini) {
+$ini = Get-ChildItem (Join-Path $pkg "*.ini") -ErrorAction SilentlyContinue | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "dipsw1" } | Select-Object -First 1 -ExpandProperty FullName
+if ($ini -and (Test-Path $ini)) {
     $bytes = [IO.File]::ReadAllBytes($ini)
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
         $txt = [IO.File]::ReadAllText($ini) -replace "^\uFEFF", ""
@@ -57,16 +57,16 @@ if (Test-Path $ini) {
     }
     if ($txt -match '(?m)^dipsw1\s*=\s*0') { OK "dipsw1=0（在线模式）" }
     if ($txt -match 'AimeDB\s*=\s*(\S+)') { OK "AimeDB = $($Matches[1])" }
-} else { Bad "Package\主配置 ini 不存在" "游戏文件不完整？" }
-$toml = Join-Path $pkg "mod 配置.toml"
-if (Test-Path $toml) {
+} else { Bad "Package 下没找到含 dipsw1 的 ini" "游戏文件不完整？" }
+$toml = Get-ChildItem (Join-Path $pkg "*.toml") -ErrorAction SilentlyContinue | Where-Object { (Get-Content $_.FullName -Raw -Encoding 936 -ErrorAction SilentlyContinue) -match "PortName_1P" } | Select-Object -First 1 -ExpandProperty FullName
+if ($toml -and (Test-Path $toml)) {
     $t = [IO.File]::ReadAllText($toml, [Text.Encoding]::GetEncoding(936))
     if ($t -match 'PortName_1P\s*=\s*"([^"]+)"') {
         $pn = $Matches[1]
         if ($pn.Trim().ToUpper() -eq "COM1") { OK "mod 配置 触摸板端口 = COM1" }
         else { Bad "mod 配置 触摸板端口是 $pn，应为 COM1" "把 Package\mod 配置.toml 的 [GameSystem.TouchPanelPort] PortName_1P 改成 `"COM1`"" }
     } else { Warn "mod 配置.toml 里没找到 PortName_1P（可能用默认 COM3）" }
-} else { Warn "Package\mod 配置.toml 不存在（需要 mod 配置 mod）" }
+} else { Warn "Package 下没找到含 PortName_1P 的 toml（需要游戏侧触摸板配置）" }
 Write-Host "`n=== 5/6 串流服务 Sunshine ===" -ForegroundColor Cyan
 $sun = Get-Service SunshineService -ErrorAction SilentlyContinue
 if ($sun) {
@@ -82,7 +82,7 @@ else { Warn "当前是横屏，游戏按 1080x1920 竖屏设计；启动时会�
 Write-Host ""
 if ($script:fail -gt 0) {
     Write-Host "=== 自检未通过（$script:fail 项）===" -ForegroundColor Red
-    Write-Host "按上面的 → 提示处理后重新双击『一键启动.bat』。" -ForegroundColor Yellow
+    Write-Host "按上面的 → 提示处理后重新双击『run.bat』。" -ForegroundColor Yellow
     exit 1
 }
 Write-Host "=== 自检全部通过 ===" -ForegroundColor Green
